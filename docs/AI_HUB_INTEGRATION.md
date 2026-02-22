@@ -1,63 +1,68 @@
 # AI Hub Integration Notes
 
-## Required Inputs
+## Recommended Mode (Official SDK)
 
-- `aihub.base_url`
+The default real profile path uses Qualcomm's official `qai_hub` Python SDK.
+
+References:
+- [AI Hub Get Started](https://aihub.qualcomm.com/get-started)
+- [API Docs](https://app.aihub.qualcomm.com/docs/hub/api.html)
+- [submit_profile_job](https://app.aihub.qualcomm.com/docs/hub/generated/qai_hub.submit_profile_job.html)
+- [ProfileJob.download_profile](https://app.aihub.qualcomm.com/docs/hub/generated/qai_hub.client.ProfileJob.html)
+
+### Required Inputs
+
+- `QAI_HUB_API_KEY` environment variable
 - `aihub.project`
-- API key in env var (default: `QAI_HUB_API_KEY`)
+- `aihub.device`
 
-## Config Switch
-
-Set in YAML:
+### Config Example
 
 ```yaml
 aihub:
-  mode: qai_hub
+  mode: qai_hub_sdk
+  api_key_env: QAI_HUB_API_KEY
+  project: edge-optimization
+  device: Samsung Galaxy S24 (Family)
+  profile_options: --compute_unit npu --qairt_version default --target_runtime qnn_context_binary
+```
+
+### Runtime Flow
+
+1. `qai_hub.upload_model(<local-context-binary>)`
+2. `qai_hub.submit_profile_job(...)`
+3. `ProfileJob.wait(...)`
+4. `ProfileJob.download_profile()`
+5. parse latency/throughput/power/memory from profile payload
+
+## REST Fallback Mode
+
+Use only if your deployment requires custom HTTP endpoints.
+
+```yaml
+aihub:
+  mode: qai_hub_rest
   base_url: https://<your-ai-hub-endpoint>
-  project: <project-name>
 ```
 
-Set env:
+REST fallback implementation is in:
+- `/Users/bharadwaj/Documents/model_creation/src/edge_qnn_pipeline/profiling/aihub_client.py`
 
-```bash
-export QAI_HUB_API_KEY=<token>
-```
+## API Token Setup
 
-## Endpoint Contract Alignment
+SDK mode supports either:
+- CLI configuration (`qai-hub configure --api_token ...`), or
+- runtime token from environment via `aihub.api_key_env` (pipeline calls `qai_hub.set_session_token(...)` when present)
 
-`QAIHubProfilerBackend` assumes these endpoints:
-- `POST /v1/artifacts`
-- `POST /v1/jobs`
-- `GET /v1/jobs/{job_id}`
-- `GET /v1/jobs/{job_id}/metrics`
+## Validation Checklist
 
-If your tenant uses different payloads/paths, update:
-- `_upload_artifact`
-- `_create_profile_job`
-- `_wait_for_completion`
-- `_extract_metrics`
-
-in `src/edge_qnn_pipeline/profiling/aihub_client.py`.
-
-## Expected Metrics Keys
-
-Parser currently checks:
-- latency: `latency_ms`, `avg_latency_ms`, `inference_time_ms`
-- throughput: `throughput_fps`, `fps`
-- power: `power_watts`, `avg_power_w`
-- memory: `memory_mb`, `peak_memory_mb`
-
-Adjust `_extract_optional_metric` lookups for your report schema.
-
-## Runtime Optimization Loop With Real API
-
-1. Run with `dry_run: false` and `aihub.mode: qai_hub`.
-2. Validate one iteration completes.
-3. Confirm parsed latency matches AI Hub UI report.
-4. Expand optimization policy only after metrics parsing is stable.
+1. Run one iteration with `dry_run: false`.
+2. Confirm profile job status is `SUCCESS`.
+3. Compare parsed latency in `profile_metrics.json` against AI Hub report.
+4. Then enable full optimization loop.
 
 ## Security
 
-- Keep API key only in environment variables.
-- Avoid writing bearer tokens in config or logs.
-- Restrict project permissions to profiling scope.
+- Keep API key in environment only.
+- Do not commit tokens, profile credentials, or private endpoint secrets.
+- Scope token permissions to minimal required access.

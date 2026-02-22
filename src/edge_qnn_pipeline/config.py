@@ -60,6 +60,8 @@ class AIHubConfig:
     base_url: str | None = None
     api_key_env: str = "QAI_HUB_API_KEY"
     project: str | None = None
+    device: str | None = None
+    profile_options: str = "--compute_unit npu --qairt_version default"
     polling_interval_sec: int = 10
     timeout_sec: int = 1800
 
@@ -169,6 +171,10 @@ def load_config(path: str | Path) -> PipelineConfig:
             base_url=aihub.get("base_url"),
             api_key_env=aihub.get("api_key_env", "QAI_HUB_API_KEY"),
             project=aihub.get("project"),
+            device=aihub.get("device"),
+            profile_options=aihub.get(
+                "profile_options", "--compute_unit npu --qairt_version default"
+            ),
             polling_interval_sec=aihub.get("polling_interval_sec", 10),
             timeout_sec=aihub.get("timeout_sec", 1800),
         ),

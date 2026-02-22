@@ -34,7 +34,7 @@ COPY tests /workspace/tests
 COPY docker /workspace/docker
 
 RUN python -m pip install --upgrade pip setuptools wheel && \
-    python -m pip install -e '.[dev]'
+    python -m pip install -e '.[dev,qaihub]'
 
 RUN chmod +x /workspace/docker/*.sh /workspace/scripts/*.sh 2>/dev/null || true
 

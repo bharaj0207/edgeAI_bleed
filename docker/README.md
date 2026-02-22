@@ -26,7 +26,6 @@ docker run --rm -it \
 
 ```bash
 export QAI_HUB_API_KEY=<your-key>
-export QAI_HUB_BASE_URL=https://<your-ai-hub-host>
 
 # Put your SDK archive in the repo root or mount it from elsewhere
 export QAIRT_SDK_ARCHIVE=/workspace/qairt-sdk.tar.gz
@@ -34,7 +33,6 @@ export QAIRT_SDK_ARCHIVE=/workspace/qairt-sdk.tar.gz
 docker run --rm -it \
   -v "$PWD":/workspace \
   -e QAI_HUB_API_KEY \
-  -e QAI_HUB_BASE_URL \
   -e QAIRT_SDK_ARCHIVE \
   edge-qnn-pipeline:latest \
   bash -lc 'PIPELINE_MODE=real /workspace/docker/smoke_test_in_container.sh'

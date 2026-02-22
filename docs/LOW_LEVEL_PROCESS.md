@@ -63,9 +63,17 @@ Key flags assembled:
 
 Two modes:
 - `mock`: deterministic synthetic latency for dry-loop validation.
-- `qai_hub`: upload context binary, create profiling job, poll completion, parse latency and optional metrics.
+- `qai_hub_sdk` (default real mode): use official Qualcomm SDK.
+- `qai_hub_rest` (fallback): direct REST integration for custom endpoint deployments.
 
-Expected flow for `qai_hub` mode:
+Expected flow for `qai_hub_sdk` mode:
+1. `qai_hub.upload_model(<local_context_binary>)`
+2. `qai_hub.submit_profile_job(...)`
+3. `ProfileJob.wait(...)`
+4. `ProfileJob.download_profile()`
+5. parse latency/throughput/power/memory from returned profile payload
+
+Expected flow for `qai_hub_rest` mode:
 1. `POST /v1/artifacts` with context binary.
 2. `POST /v1/jobs` with target + artifact metadata.
 3. Poll `GET /v1/jobs/<id>` until success/fail.

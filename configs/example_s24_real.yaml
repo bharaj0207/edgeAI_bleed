@@ -2,7 +2,6 @@
 # Requires:
 # - QNN/QAIRT SDK available at QNN_SDK_ROOT
 # - valid AI Hub API key in QAI_HUB_API_KEY
-# - base URL exported as QAI_HUB_BASE_URL
 
 dry_run: false
 run_dir: runs
@@ -46,10 +45,14 @@ qnn:
     - detailed
 
 aihub:
-  mode: qai_hub
-  base_url: ${QAI_HUB_BASE_URL}
+  # Uses official qai_hub Python SDK.
+  mode: qai_hub_sdk
   api_key_env: QAI_HUB_API_KEY
   project: edge-optimization
+  device: Samsung Galaxy S24 (Family)
+  # Qualcomm profile options syntax:
+  # https://app.aihub.qualcomm.com/docs/hub/api.html#profile-inference-options
+  profile_options: --compute_unit npu --qairt_version default --target_runtime qnn_context_binary
   polling_interval_sec: 15
   timeout_sec: 2400
 

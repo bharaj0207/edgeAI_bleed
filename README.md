@@ -24,7 +24,7 @@ You asked for a PC-first pipeline where conversion happens locally (QNN SDK), th
 - `src/edge_qnn_pipeline/config.py`: typed config contracts
 - `src/edge_qnn_pipeline/ingest/model_loader.py`: PyTorch/ONNX ingest and export hooks
 - `src/edge_qnn_pipeline/conversion/qnn_backend.py`: QNN converter/lib/context binary generation
-- `src/edge_qnn_pipeline/profiling/aihub_client.py`: profiling backend interface (`mock` + `qai_hub`)
+- `src/edge_qnn_pipeline/profiling/aihub_client.py`: profiling backend interface (`mock` + `qai_hub_sdk` + `qai_hub_rest`)
 - `src/edge_qnn_pipeline/optimization/strategy.py`: iterative optimization policy engine
 - `src/edge_qnn_pipeline/optimization/iteration_analyzer.py`: agent-style analysis of each iteration
 - `src/edge_qnn_pipeline/workflow/graph.py`: LangGraph state machine
@@ -102,15 +102,20 @@ For real SDK + AI Hub runs, see:
 ## Switch To Real AI Hub
 
 In config:
-- use `configs/example_s24_real.yaml` (already set to real mode)
-- set `aihub.project`
+- use `configs/example_s24_real.yaml` (already set to real mode using `qai_hub` SDK)
+- set `aihub.project` and `aihub.device`
 
 In environment:
 
 ```bash
 export QAI_HUB_API_KEY=<your-key>
-export QAI_HUB_BASE_URL=<your-ai-hub-base-url>
 export QNN_SDK_ROOT=<path-to-qnn-sdk>
+```
+
+Install AI Hub SDK extras if needed:
+
+```bash
+pip install -e ".[qaihub]"
 ```
 
 ## How Iterative Optimization Works
@@ -150,5 +155,6 @@ The workflow is structured so these can be inserted as new nodes with minimal re
 
 ## Notes
 
-- QAI Hub REST endpoints differ by environment. `QAIHubProfilerBackend` is implemented as a configurable scaffold; adapt endpoint payload keys to your tenant contract.
+- Default AI Hub integration uses official `qai_hub` SDK (`submit_profile_job`, `download_profile`).
+- A REST fallback mode (`aihub.mode: qai_hub_rest`) is kept for custom deployments that require direct HTTP APIs.
 - `scripts/architecture_tune.py` is intentionally a hook and does not modify model topology by itself.
