@@ -1,0 +1,10 @@
+{
+  "graphs": [
+    {
+      "graph_names": ["*"],
+      "vtcm_mb": 8,
+      "fp16_relaxed_precision": true,
+      "profiling_level": "detailed"
+    }
+  ]
+}
