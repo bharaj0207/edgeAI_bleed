@@ -6,4 +6,6 @@ __pycache__/
 .pytest_cache/
 runs/
 artifacts/
+models/
+.env
 *.egg-info/

@@ -30,8 +30,12 @@ You asked for a PC-first pipeline where conversion happens locally (QNN SDK), th
 - `src/edge_qnn_pipeline/workflow/graph.py`: LangGraph state machine
 - `src/edge_qnn_pipeline/reports/writer.py`: per-iteration and final reports
 - `configs/example_s24_run.yaml`: full pipeline config example
+- `configs/example_s24_real.yaml`: real conversion + AI Hub profiling config
 - `scripts/export_pytorch.py`: PyTorch -> ONNX helper
 - `scripts/architecture_tune.py`: architecture-tuning hook placeholder
+- `scripts/download_resnet50_onnx.sh`: fetches a sample ResNet-50 ONNX
+- `docker/Dockerfile`: reproducible container environment
+- `docker/smoke_test_in_container.sh`: container smoke-test runner
 
 ## Prerequisites
 
@@ -70,18 +74,42 @@ edge-qnn-pipeline run --config configs/example_s24_run.yaml
 
 By default the example config uses `dry_run: true` and `aihub.mode: mock` so you can validate the pipeline without cloud/device calls.
 
+## Docker Environment
+
+Build image:
+
+```bash
+docker build -f docker/Dockerfile -t edge-qnn-pipeline:latest .
+```
+
+Run container smoke test (mock mode):
+
+```bash
+docker run --rm -it -v "$PWD":/workspace edge-qnn-pipeline:latest /workspace/docker/smoke_test_in_container.sh
+```
+
+Or use helper:
+
+```bash
+./docker/run_container.sh
+```
+
+For real SDK + AI Hub runs, see:
+- `docker/README.md`
+- `configs/example_s24_real.yaml`
+- `.env.example`
+
 ## Switch To Real AI Hub
 
 In config:
-- set `dry_run: false`
-- set `aihub.mode: qai_hub`
-- set `aihub.base_url`
+- use `configs/example_s24_real.yaml` (already set to real mode)
 - set `aihub.project`
 
 In environment:
 
 ```bash
 export QAI_HUB_API_KEY=<your-key>
+export QAI_HUB_BASE_URL=<your-ai-hub-base-url>
 export QNN_SDK_ROOT=<path-to-qnn-sdk>
 ```
 
