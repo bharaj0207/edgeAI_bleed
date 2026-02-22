@@ -15,6 +15,14 @@ fi
 
 MODE="${PIPELINE_MODE:-mock}"
 if [[ "$MODE" == "real" ]]; then
+  if [[ ! -x "${QNN_SDK_ROOT:-/opt/qairt}/bin/qnn-onnx-converter" ]]; then
+    echo "QNN SDK not found at ${QNN_SDK_ROOT:-/opt/qairt}. Mount SDK or set QAIRT_SDK_ARCHIVE."
+    exit 1
+  fi
+  if [[ -z "${QAI_HUB_API_KEY:-}" ]]; then
+    echo "QAI_HUB_API_KEY is required for real AI Hub profiling mode."
+    exit 1
+  fi
   edge-qnn-pipeline run --config configs/example_s24_real.yaml --log-level INFO
 else
   edge-qnn-pipeline run --config configs/example_s24_run.yaml --log-level INFO
