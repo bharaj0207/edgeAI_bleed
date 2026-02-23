@@ -56,6 +56,22 @@ aihub:
   polling_interval_sec: 15
   timeout_sec: 2400
 
+
+  # Optional physical-device profiling (bypasses AI Hub when provided).
+  # hardware:
+  #   ip: 192.168.1.40
+  #   pem_key: /path/to/device_key.pem
+  #   qnn_net_run_path: /data/local/tmp/qnn-net-run
+  #   user: root
+  #   remote_workdir: /tmp/edge_qnn_pipeline
+  #   net_run_args: [--profiling_level, detailed]
+  #   retries: 2
+  #   fallback_to_aihub: true
+  #   # Optional jump host/server
+  #   server_ip: 10.10.0.5
+  #   server_user: ubuntu
+  #   server_pem_key: /path/to/server_key.pem
+
 optimization:
   target_latency_ms: 8.5
   max_iterations: 8

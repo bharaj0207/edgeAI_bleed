@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import re
+import shlex
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Protocol
@@ -38,6 +40,143 @@ class MockProfilerBackend:
             throughput_fps=throughput,
             raw={"mode": "mock", "seed": seed, "target": target.name},
         )
+
+
+class PhysicalDeviceProfilerBackend:
+    def __init__(self, config: AIHubConfig, fallback_profiler: ProfilerBackend | None = None):
+        if not config.hardware:
+            raise ValueError("aihub.hardware is required for physical device profiling")
+        self.config = config
+        self.hardware = config.hardware
+        self.fallback_profiler = fallback_profiler
+
+    def profile(self, context_binary: Path, target: TargetConfig, iteration: int) -> ProfileResult:
+        if not context_binary.exists():
+            raise FileNotFoundError(f"Context binary not found: {context_binary}")
+
+        last_error: Exception | None = None
+        for attempt in range(1, self.hardware.retries + 2):
+            try:
+                return self._profile_once(context_binary, target, iteration, attempt)
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                LOG.warning("Physical profiling attempt %s failed: %s", attempt, exc)
+
+        if self.hardware.fallback_to_aihub and self.fallback_profiler is not None:
+            LOG.warning("Falling back to AI Hub profiler after physical profiling failures")
+            return self.fallback_profiler.profile(context_binary, target, iteration)
+
+        raise RuntimeError("Physical device profiling failed after retries") from last_error
+
+    def _profile_once(self, context_binary: Path, target: TargetConfig, iteration: int, attempt: int) -> ProfileResult:
+        remote_ctx = f"{self.hardware.remote_workdir}/{context_binary.name}"
+        remote_out = (
+            f"{self.hardware.remote_workdir}/profile-{target.name}-"
+            f"iter-{iteration:02d}-attempt-{attempt}.txt"
+        )
+
+        self._ssh_exec(f"mkdir -p {shlex.quote(self.hardware.remote_workdir)}")
+        self._scp_to_target(context_binary, remote_ctx)
+
+        args = " ".join(shlex.quote(arg) for arg in self.hardware.net_run_args)
+        profile_cmd = (
+            f"{shlex.quote(self.hardware.qnn_net_run_path)} "
+            f"--retrieve_context {shlex.quote(remote_ctx)} "
+            f"{args} > {shlex.quote(remote_out)} 2>&1"
+        ).strip()
+        self._ssh_exec(profile_cmd)
+        output = self._ssh_exec(f"cat {shlex.quote(remote_out)}")
+
+        latency = _extract_latency_from_qnn_net_run(output)
+        throughput = _extract_optional_value_from_output(output, ("throughput", "fps"))
+
+        return ProfileResult(
+            latency_ms=latency,
+            throughput_fps=throughput,
+            raw={
+                "mode": "physical_device",
+                "target": target.name,
+                "device_ip": self.hardware.ip,
+                "iteration": iteration,
+                "attempt": attempt,
+                "remote_output": output,
+            },
+        )
+
+    def _target_ssh_destination(self) -> str:
+        return f"{self.hardware.user}@{self.hardware.ip}"
+
+    def _proxy_command(self) -> str | None:
+        if not self.hardware.server_ip:
+            return None
+        if not self.hardware.server_user:
+            raise ValueError("aihub.hardware.server_user is required when server_ip is set")
+
+        cmd = ["ssh", "-o", "StrictHostKeyChecking=no"]
+        if self.hardware.server_pem_key:
+            cmd.extend(["-i", str(self.hardware.server_pem_key)])
+        cmd.extend([
+            "-W",
+            "%h:%p",
+            f"{self.hardware.server_user}@{self.hardware.server_ip}",
+        ])
+        return shlex.join(cmd)
+
+    def _base_ssh_cmd(self) -> list[str]:
+        cmd = [
+            "ssh",
+            "-i",
+            str(self.hardware.pem_key),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            f"ConnectTimeout={self.hardware.connect_timeout_sec}",
+        ]
+        proxy_command = self._proxy_command()
+        if proxy_command:
+            cmd.extend(["-o", f"ProxyCommand={proxy_command}"])
+        cmd.append(self._target_ssh_destination())
+        return cmd
+
+    def _base_scp_cmd(self) -> list[str]:
+        cmd = [
+            "scp",
+            "-i",
+            str(self.hardware.pem_key),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            f"ConnectTimeout={self.hardware.connect_timeout_sec}",
+        ]
+        proxy_command = self._proxy_command()
+        if proxy_command:
+            cmd.extend(["-o", f"ProxyCommand={proxy_command}"])
+        return cmd
+
+    def _ssh_exec(self, remote_cmd: str) -> str:
+        cmd = [*self._base_ssh_cmd(), remote_cmd]
+        return self._run_cmd(cmd)
+
+    def _scp_to_target(self, local_path: Path, remote_path: str) -> None:
+        cmd = [
+            *self._base_scp_cmd(),
+            str(local_path),
+            f"{self._target_ssh_destination()}:{remote_path}",
+        ]
+        self._run_cmd(cmd)
+
+    @staticmethod
+    def _run_cmd(cmd: list[str]) -> str:
+        try:
+            completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return completed.stdout
+        except subprocess.CalledProcessError as exc:
+            command = shlex.join(exc.cmd if isinstance(exc.cmd, list) else cmd)
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            raise RuntimeError(
+                f"Command failed: {command}; stdout='{stdout}'; stderr='{stderr}'"
+            ) from exc
 
 
 class QAIHubRestProfilerBackend:
@@ -295,6 +434,38 @@ class QAIHubSDKProfilerBackend:
         return None
 
 
+def _extract_latency_from_qnn_net_run(output: str) -> float:
+    lowered = output.lower()
+    line_candidates = [line.strip() for line in lowered.splitlines() if line.strip()]
+
+    for line in line_candidates:
+        if any(keyword in line for keyword in ("latency", "inference", "execution", "total")):
+            value = _coerce_float(line, unit="time")
+            if value is not None:
+                return value
+
+    # Fallback: parse any explicit latency expression across the whole payload.
+    match = re.search(
+        r"(?:latency|inference|execution|total)[^0-9]*([+-]?[0-9]*\.?[0-9]+(?:[eE][+-]?[0-9]+)?)\s*([a-zA-Z]+)?",
+        lowered,
+    )
+    if match:
+        value = _coerce_float(f"{match.group(1)} {match.group(2) or ''}".strip(), unit="time")
+        if value is not None:
+            return value
+
+    raise RuntimeError("Unable to parse latency from qnn-net-run output")
+
+
+def _extract_optional_value_from_output(output: str, keywords: tuple[str, ...]) -> float | None:
+    lowered = output.lower()
+    for keyword in keywords:
+        match = re.search(rf"{re.escape(keyword)}[^0-9]*([0-9]*\.?[0-9]+)", lowered)
+        if match:
+            return float(match.group(1))
+    return None
+
+
 LATENCY_KEYWORDS = (
     "latency",
     "inference_time",
@@ -376,6 +547,16 @@ def _coerce_float(value: Any, unit: str | None = None) -> float | None:
 
 
 def build_profiler(config: AIHubConfig) -> ProfilerBackend:
+    if config.hardware:
+        fallback: ProfilerBackend | None = None
+        if config.mode == "qai_hub_rest":
+            fallback = QAIHubRestProfilerBackend(config)
+        elif config.mode in {"qai_hub", "qai_hub_sdk"}:
+            fallback = QAIHubSDKProfilerBackend(config)
+        elif config.mode != "mock":
+            raise ValueError(f"Unsupported aihub.mode '{config.mode}'")
+        return PhysicalDeviceProfilerBackend(config, fallback_profiler=fallback)
+
     if config.mode == "mock":
         return MockProfilerBackend()
     if config.mode == "qai_hub_rest":
