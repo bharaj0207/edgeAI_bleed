@@ -24,7 +24,7 @@ You asked for a PC-first pipeline where conversion happens locally (QNN SDK), th
 - `src/edge_qnn_pipeline/config.py`: typed config contracts
 - `src/edge_qnn_pipeline/ingest/model_loader.py`: PyTorch/ONNX ingest and export hooks
 - `src/edge_qnn_pipeline/conversion/qnn_backend.py`: QNN converter/lib/context binary generation
-- `src/edge_qnn_pipeline/profiling/aihub_client.py`: profiling backend interface (`mock` + `qai_hub_sdk` + `qai_hub_rest`)
+- `src/edge_qnn_pipeline/profiling/aihub_client.py`: profiling backend interface (`mock` + `qai_hub_sdk` + `qai_hub_rest` + physical device SSH profiling with optional server hop)
 - `src/edge_qnn_pipeline/optimization/strategy.py`: iterative optimization policy engine
 - `src/edge_qnn_pipeline/optimization/iteration_analyzer.py`: agent-style analysis of each iteration
 - `src/edge_qnn_pipeline/workflow/graph.py`: LangGraph state machine
@@ -73,6 +73,8 @@ edge-qnn-pipeline run --config configs/example_s24_run.yaml
 ```
 
 By default the example config uses `dry_run: true` and `aihub.mode: mock` so you can validate the pipeline without cloud/device calls.
+
+For physical-device profiling, populate `aihub.hardware` in your YAML. When `aihub.hardware` is present, the pipeline profiles directly on hardware using SSH (`root@<ip>` by default), can hop through an intermediate server (`server_ip`/`server_user`/`server_pem_key`), and can optionally fall back to AI Hub on repeated device failures.
 
 ## Docker Environment
 

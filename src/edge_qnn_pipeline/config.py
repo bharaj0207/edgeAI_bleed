@@ -64,6 +64,23 @@ class AIHubConfig:
     profile_options: str = "--compute_unit npu --qairt_version default"
     polling_interval_sec: int = 10
     timeout_sec: int = 1800
+    hardware: HardwareConfig | None = None
+
+
+@dataclass
+class HardwareConfig:
+    ip: str
+    pem_key: Path
+    qnn_net_run_path: str
+    user: str = "root"
+    server_ip: str | None = None
+    server_user: str | None = None
+    server_pem_key: Path | None = None
+    remote_workdir: str = "/tmp/edge_qnn_pipeline"
+    net_run_args: list[str] = field(default_factory=lambda: ["--profiling_level", "detailed"])
+    retries: int = 2
+    connect_timeout_sec: int = 20
+    fallback_to_aihub: bool = True
 
 
 @dataclass
@@ -124,6 +141,7 @@ def load_config(path: str | Path) -> PipelineConfig:
     quantization = data.get("quantization", {})
     qnn = data["qnn"]
     aihub = data.get("aihub", {})
+    hardware = aihub.get("hardware")
     optimization = data["optimization"]
     agent = data.get("agent", {})
 
@@ -177,6 +195,24 @@ def load_config(path: str | Path) -> PipelineConfig:
             ),
             polling_interval_sec=aihub.get("polling_interval_sec", 10),
             timeout_sec=aihub.get("timeout_sec", 1800),
+            hardware=(
+                HardwareConfig(
+                    ip=hardware["ip"],
+                    pem_key=Path(hardware["pem_key"]),
+                    qnn_net_run_path=hardware["qnn_net_run_path"],
+                    user=hardware.get("user", "root"),
+                    server_ip=hardware.get("server_ip"),
+                    server_user=hardware.get("server_user"),
+                    server_pem_key=_to_path(hardware.get("server_pem_key")),
+                    remote_workdir=hardware.get("remote_workdir", "/tmp/edge_qnn_pipeline"),
+                    net_run_args=hardware.get("net_run_args", ["--profiling_level", "detailed"]),
+                    retries=hardware.get("retries", 2),
+                    connect_timeout_sec=hardware.get("connect_timeout_sec", 20),
+                    fallback_to_aihub=hardware.get("fallback_to_aihub", True),
+                )
+                if hardware
+                else None
+            ),
         ),
         optimization=OptimizationConfig(
             target_latency_ms=optimization["target_latency_ms"],
